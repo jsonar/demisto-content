@@ -1,5 +1,5 @@
 commonfields:
-  id: 2aa9f737-8c7c-42f5-815f-4d104bb3af06
+  id: SEPScan
   version: -1
 name: SEPScan
 deprecated: true
@@ -40,7 +40,9 @@ type: javascript
 tags:
 - sep
 - symantec
-comment: Scans ip/hostname with Symantec Endpoint Protection. DEPRECATED - this automation is deprecated as it was replaced by `sep-scan-endpoint` command in 'Symantec Endpoint Protection V2' integration.
+comment: Scans ip/hostname with Symantec Endpoint Protection. DEPRECATED - this automation
+  is deprecated as it was replaced by `sep-scan-endpoint` command in 'Symantec Endpoint
+  Protection V2' integration.
 enabled: true
 args:
 - name: scanType
@@ -63,7 +65,7 @@ args:
 scripttarget: 0
 timeout: 600ns
 tests:
-  - No test - deprecated
+- No test - deprecated
 dependson:
   must:
   - sep-command-status

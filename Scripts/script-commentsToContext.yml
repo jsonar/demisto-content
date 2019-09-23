@@ -1,6 +1,6 @@
 commonfields:
-  id: 120c861a-e0ae-417e-8dcf-c3ee1dc15a42
-  version: 38
+  id: commentsToContext
+  version: -1
 name: commentsToContext
 script: |-
   var entry = executeCommand("getEntry", {"id":args.entryId});
@@ -36,5 +36,5 @@ args:
   required: true
   description: Context key to store comments into
 - name: listSeperator
-  description: If value is list - provide list seperator 
+  description: If value is list - provide list seperator
 scripttarget: 0

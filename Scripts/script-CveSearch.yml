@@ -1,8 +1,8 @@
 commonfields:
-  id: c99e196b-e05e-41f2-82cb-6798f33cb653
-  version: 32
+  id: cveSearch
+  version: -1
 name: cveSearch
-script: |2
+script: |
 
   var resCmd = executeCommand('cve-search', args);
 
