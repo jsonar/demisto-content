@@ -65,4 +65,4 @@ args:
 scripttarget: 0
 deprecated: true
 tests:
-- No test
+- No test - deprecated script

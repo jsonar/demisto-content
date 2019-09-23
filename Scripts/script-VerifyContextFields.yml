@@ -42,3 +42,5 @@ args:
   description: optional field4 value validation
 scripttarget: 0
 deprecated: true
+tests:
+- No test - deprecated script
