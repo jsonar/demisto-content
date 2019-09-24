@@ -1,5 +1,5 @@
 ## [Unreleased]
--
+* Bugfix for invalide default value of fetch time.
 
 ## [19.9.1] - 2019-09-18
 Added 14 commands:
