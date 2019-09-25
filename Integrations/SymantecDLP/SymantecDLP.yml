@@ -1,0 +1,77 @@
+category: Endpoint
+commonfields:
+  id: Symantec Data Loss Prevention
+  version: -1
+configuration:
+- display: Enforce Server (e.g. https://192.168.0.1)
+  name: server
+  required: true
+  type: 0
+- display: Username
+  name: credentials
+  required: false
+  type: 9
+- display: Trust any certificate (not secure)
+  name: insecure
+  required: false
+  type: 8
+- display: Use system proxy settings
+  name: proxy
+  required: false
+  type: 8
+- display: Fetch incidents
+  name: isFetch
+  required: false
+  type: 8
+- display: Incident type
+  name: incidentType
+  required: false
+  type: 13
+- defaultvalue: 3 days
+  display: First fetch timestamp (<number> <time unit>, e.g., 12 hours, 7 days)
+  name: fetch_time
+  required: false
+  type: 0
+- display: Saved Report ID (Required for list incidents)
+  name: saved_report_id
+  required: false
+  type: 0
+description: Symantec Data Loss Prevention Incident Reporting and Update
+display: Symantec Data Loss Prevention
+name: Symantec Data Loss Prevention
+script:
+  commands:
+  - arguments:
+    - default: false
+      defaultValue: 1 day
+      description: Get incidents with creation date later than specified. Given in
+        free text (e.g. '2 days')
+      isArray: false
+      name: creation_date
+      required: false
+      secret: false
+    deprecated: false
+    description: Returns a list of incidents.
+    execution: false
+    name: symantec-dlp-list-incidents
+  - arguments:
+    - default: false
+      description: Incident ID to get details of.
+      isArray: false
+      name: incident_id
+      required: true
+      secret: false
+    deprecated: false
+    description: Returns a specified incident
+    execution: false
+    name: symantec-dlp-get-incident-details
+  - deprecated: false
+    execution: false
+    name: symantec-dlp-update-incident
+  dockerimage: demisto/zeep:1.0.0.1281
+  isfetch: false
+  longRunning: false
+  longRunningPort: false
+  runonce: false
+  script: '-'
+  type: python
