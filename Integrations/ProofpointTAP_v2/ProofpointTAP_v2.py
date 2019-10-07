@@ -1,5 +1,4 @@
 import demistomock as demisto
-
 from CommonServerPython import *
 
 ''' IMPORTS '''
@@ -7,9 +6,10 @@ from CommonServerPython import *
 from datetime import datetime, timedelta
 import json
 import requests
+import urllib3
 
 # Disable insecure warnings
-requests.packages.urllib3.disable_warnings()
+urllib3.disable_warnings()
 
 ALL_EVENTS = "All"
 ISSUES_EVENTS = "Issues"
@@ -43,28 +43,27 @@ def get_fetch_times(last_fetch):
     """
     now = get_now() - timedelta(seconds=30)
     times = list()
-    time_format = "%Y-%m-%dT%H:%M:%SZ"
     if isinstance(last_fetch, str):
         times.append(last_fetch)
-        last_fetch = datetime.strptime(last_fetch, time_format)
+        last_fetch = datetime.strptime(last_fetch, DATE_FORMAT)
     elif isinstance(last_fetch, datetime):
-        times.append(last_fetch.strftime(time_format))
+        times.append(last_fetch.strftime(DATE_FORMAT))
     while now - last_fetch > timedelta(hours=1):
         last_fetch += timedelta(hours=1)
-        times.append(last_fetch.strftime(time_format))
+        times.append(last_fetch.strftime(DATE_FORMAT))
     return times
 
 
 class Client:
     def __init__(self, proofpoint_url, api_version, verify, service_principal, secret, proxies):
-        self.base_url = "{}/{}/siem".format(proofpoint_url, api_version)
+        self.base_url = urljoin(proofpoint_url, api_version)
         self.verify = verify
         self.service_principal = service_principal
         self.secret = secret
         self.proxies = proxies
 
     def http_request(self, method, url_suffix, params=None, data=None):
-        full_url = self.base_url + url_suffix
+        full_url = urljoin(self.base_url, url_suffix)
 
         res = requests.request(
             method,
@@ -77,13 +76,12 @@ class Client:
         )
 
         if res.status_code not in [200, 204]:
-            raise ValueError('Error in API call to Proofpoint TAP [%d]. Reason: %s' % (res.status_code, res.text))
+            raise ValueError(f'Error in API call to Proofpoint TAP {res.status_code}. Reason: {res.text}')
 
         try:
             return res.json()
         except Exception:
-            raise ValueError(
-                "Failed to parse http response to JSON format. Original response body: \n{}".format(res.text))
+            raise ValueError(f"Failed to parse http response to JSON format. Original response body: \n{res.text}")
 
     def get_events(self, interval=None, since_time=None, since_seconds=None, threat_type=None, threat_status=None,
                    event_type_filter="All"):
@@ -94,21 +92,15 @@ class Client:
         query_params = {
             "format": "json"
         }
-
-        if interval:
-            query_params["interval"] = interval
-
-        if since_time:
-            query_params["sinceTime"] = since_time
-
-        if since_seconds:
-            query_params["sinceSeconds"] = since_seconds
-
-        if threat_status:
-            query_params["threatStatus"] = threat_status
-
-        if threat_type:
-            query_params["threatType"] = threat_type
+        query_params.update(
+            assign_params(
+                interval=interval,
+                sinceTime=since_time,
+                sinceSeconds=since_seconds,
+                threatStatus=threat_status,
+                threatType=threat_type
+            )
+        )
 
         url_route = {
             "All": "/all",
@@ -119,9 +111,20 @@ class Client:
             "Delivered Messages": "/messages/delivered"
         }[event_type_filter]
 
-        events = self.http_request("GET", url_route, params=query_params)
+        events = self.http_request("GET", urljoin('siem', url_route), params=query_params)
 
         return events
+
+    def get_forensics(self, threat_id=None, campaign_id=None, include_campaign_forensics=None):
+        if threat_id and campaign_id:
+            raise DemistoException('threadId and campaignID supplied, supply only one of them')
+        if include_campaign_forensics and campaign_id:
+            raise DemistoException('includeCampaignForensics can be true only with threadId')
+        params = assign_params(
+            threatId=threat_id,
+            campaingId=campaign_id,
+            includeCampaignForensics=include_campaign_forensics)
+        return self.http_request('GET', 'forensics', params=params)
 
 
 def test_module(client, first_fetch_time, event_type_filter):
@@ -135,6 +138,27 @@ def test_module(client, first_fetch_time, event_type_filter):
     return 'ok'
 
 
+def get_forensic_command(client: Client, args):
+    """
+    TODO: this
+    Args:
+        client (object):
+    """
+    threat_id = args.get('threatId')
+    campaign_id = args.get('campaignId')
+    include_campaign_forensics = args.get('includeCampaignForensics') == 'true'
+    raw_forensics = client.get_forensics(
+        threat_id=threat_id,
+        campaign_id=campaign_id,
+        include_campaign_forensics=include_campaign_forensics
+    )
+    reports = raw_forensics.get('reports', [])
+
+
+
+
+
+@logger
 def get_events_command(client, args):
     interval = args.get("interval")
     threat_type = argToList(args.get("threatType"))
@@ -157,6 +181,7 @@ def get_events_command(client, args):
     )
 
 
+@logger
 def fetch_incidents(client, last_run, first_fetch_time, event_type_filter, threat_type, threat_status):
     # Get the last fetch time, if exists
     last_fetch = last_run.get('last_fetch')
@@ -169,7 +194,8 @@ def fetch_incidents(client, last_run, first_fetch_time, event_type_filter, threa
     fetch_times = get_fetch_times(last_fetch)
     fetch_time_count = len(fetch_times)
     for index, fetch_time in enumerate(fetch_times):
-
+        if len(incidents) > 50:
+            break
         if index < fetch_time_count - 1:
             raw_events = client.get_events(interval=fetch_time + "/" + fetch_times[index + 1],
                                            event_type_filter=event_type_filter,
@@ -180,10 +206,12 @@ def fetch_incidents(client, last_run, first_fetch_time, event_type_filter, threa
                                            threat_status=threat_status, threat_type=threat_type)
 
         for raw_event in raw_events.get("messagesDelivered", []):
+            if len(incidents) > 50:
+                break
             raw_event["type"] = "messages delivered"
             event_guid = raw_events.get("GUID", "")
             incident = {
-                "name": "Proofpoint - Message Delivered - {}".format(event_guid),
+                "name": f"Proofpoint - Message Delivered - {event_guid}",
                 "rawJSON": json.dumps(raw_event)
             }
 
@@ -197,6 +225,8 @@ def fetch_incidents(client, last_run, first_fetch_time, event_type_filter, threa
             incidents.append(incident)
 
         for raw_event in raw_events.get("messagesBlocked", []):
+            if len(incidents) > 50:
+                break
 
             raw_event["type"] = "messages blocked"
             event_guid = raw_events.get("GUID", "")
@@ -215,6 +245,8 @@ def fetch_incidents(client, last_run, first_fetch_time, event_type_filter, threa
             incidents.append(incident)
 
         for raw_event in raw_events.get("clicksPermitted", []):
+            if len(incidents) > 50:
+                break
             raw_event["type"] = "clicks permitted"
             event_guid = raw_events.get("GUID", "")
             incident = {
@@ -231,6 +263,8 @@ def fetch_incidents(client, last_run, first_fetch_time, event_type_filter, threa
             incidents.append(incident)
 
         for raw_event in raw_events.get("clicksBlocked", []):
+            if len(incidents) > 50:
+                break
             raw_event["type"] = "clicks blocked"
             event_guid = raw_events.get("GUID", "")
             incident = {
@@ -258,38 +292,41 @@ def main():
     """
     PARSE AND VALIDATE INTEGRATION PARAMS
     """
-    service_principal = demisto.params().get('credentials').get('identifier')
-    secret = demisto.params().get('credentials').get('password')
+    params = demisto.params()
+    service_principal = params.get('credentials', {}).get('identifier')
+    secret = params.get('credentials', {}).get('password')
 
     # Remove trailing slash to prevent wrong URL path to service
-    server_url = demisto.params()['url'][:-1] \
-        if (demisto.params()['url'] and demisto.params()['url'].endswith('/')) else demisto.params()['url']
-    api_version = demisto.params().get('api_version')
+    server_url = params['url'][:-1] if (params['url'] and params['url'].endswith('/')) else params['url']
+    api_version = params.get('api_version')
 
-    verify_certificate = not demisto.params().get('insecure', False)
-
+    verify_certificate = not params.get('insecure', False)
     # How many time before the first fetch to retrieve incidents
-    fetch_time = demisto.params().get('fetch_time', '3 days')
+    fetch_time = params.get('fetch_time', '60 minutes')
 
-    threat_status = argToList(demisto.params().get('threat_status'))
+    threat_status = argToList(params.get('threat_status'))
 
-    threat_type = argToList(demisto.params().get('threat_type'))
+    threat_type = argToList(params.get('threat_type'))
 
-    event_type_filter = demisto.params().get('events_type')
+    event_type_filter = params.get('events_type')
 
     # Remove proxy if not set to true in params
     proxies = handle_proxy()
 
-    LOG('Command being called is %s' % (demisto.command()))
+    command = demisto.command()
+    LOG(f'Command being called is {command}')
 
     try:
         client = Client(server_url, api_version, verify_certificate, service_principal, secret, proxies)
-
-        if demisto.command() == 'test-module':
+        commands = {
+            'proofpoint-get-events': get_events_command,
+            'proofpoint-get-forensic': get_forensic_command
+        }
+        if command == 'test-module':
             results = test_module(client, fetch_time, event_type_filter)
             return_outputs(results, None)
 
-        elif demisto.command() == 'fetch-incidents':
+        elif command == 'fetch-incidents':
             next_run, incidents = fetch_incidents(
                 client=client,
                 last_run=demisto.getLastRun(),
@@ -301,8 +338,8 @@ def main():
             demisto.setLastRun(next_run)
             demisto.incidents(incidents)
 
-        elif demisto.command() == 'proofpoint-get-events':
-            return_outputs(*get_events_command(client, demisto.args()))
+        elif command in ():
+            return_outputs(*commands[command](client, demisto.args()))
 
     except Exception as e:
         return_error(str(e))
