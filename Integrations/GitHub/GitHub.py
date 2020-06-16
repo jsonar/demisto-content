@@ -123,10 +123,10 @@ def data_formatting(title, body, labels, assignees, state):
         data['state'] = state
 
     if labels is not None:
-        data['labels'] = labels.split(',')
+        data['labels'] = argToList(labels)
 
     if assignees is not None:
-        data['assignees'] = assignees.split(',')
+        data['assignees'] = argToList(labels)
 
     return data
 
